@@ -1,133 +1,101 @@
 package com.example.todo.service;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.http.ResponseEntity;
+import com.example.todo.dto.CreateTaskRequest;
+import com.example.todo.dto.UpdateTaskRequest;
+import com.example.todo.exceptions.TodoException;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.http.HttpStatus;
-import org.springframework.data.domain.Page;
 
-import java.net.http.HttpResponse;
-import java.util.*;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
 
 import com.example.todo.manager.TodoManager;
-import com.example.todo.model.Tasks;
+import com.example.todo.model.Task;
 
+
+@RequiredArgsConstructor
 @Service
 public class TodoService {
-    @Autowired
-    TodoManager todoManager;
+    private final TodoManager todoManager;
 
+    private static final String TASK_NOT_FOUND = "Task not found";
 
-    public ResponseEntity<Page<Tasks>> getAll(int pageNo, int pageSize) {
-        try {
-            PageRequest pr = PageRequest.of(pageNo,pageSize);
-            Page allPages = todoManager.findAll(pr);
+    public List<Task> getAll(Integer offset, Integer limit) {
+        List<Task> tasks = todoManager.findAll();
 
-            if (pageNo > allPages.getTotalPages()){
-                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-            }
-            return new ResponseEntity<>(allPages, HttpStatus.OK);
-        }
-        catch (Exception e){
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        return getTasks(offset, limit, tasks);
     }
 
 
+    public List<Task> getUncompletedTasks(Integer offset, Integer limit) {
+       List<Task> tasks = todoManager.findByCompletedFalse();
 
-
-    public ResponseEntity<List<Tasks>> getUncompletedTasks() {
-        try {
-            return new ResponseEntity<>(todoManager.findByCompletedFalse(), HttpStatus.OK);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return new ResponseEntity(new ArrayList<>(), HttpStatus.BAD_REQUEST);
-        }
+       return getTasks(offset, limit, tasks);
     }
 
-    public ResponseEntity<List<Tasks>> getCompletedTasks() {
-        try {
-            return new ResponseEntity<>(todoManager.findByCompletedTrue(), HttpStatus.OK);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return new ResponseEntity<>(new ArrayList<>(), HttpStatus.BAD_REQUEST);
+    public List<Task> getCompletedTasks(Integer offset, Integer limit) {
+        List<Task> tasks = todoManager.findByCompletedTrue();
+
+        return getTasks(offset, limit, tasks);
     }
 
 
-    public ResponseEntity<Optional<Tasks>> detailTask(int id){
-        try {
-            Optional<Tasks> optionalTask = todoManager.findById(id);
-
-            if (optionalTask.isPresent()) {
-                return new ResponseEntity<>(optionalTask, HttpStatus.FOUND);
-            }
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-        }
-        catch (Exception e){
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+    public Task detailTask(int id){
+        return todoManager.findById(id).orElseThrow(() -> new TodoException(TASK_NOT_FOUND));
     }
 
-    public ResponseEntity<Tasks> createTask( Tasks task){
-            try{
-                return new ResponseEntity<>(todoManager.save(task),HttpStatus.CREATED);
-            }
-            catch( Exception e){
-                e.printStackTrace();
-            }
-
-            return  new ResponseEntity<>(HttpStatus.EXPECTATION_FAILED);
+    public Task createTask(CreateTaskRequest request){
+           Task task = Task.builder()
+                   .title(request.getTitle())
+                   .description(request.getDescription())
+                   .completed(false)
+                   .createdAt(LocalDateTime.now())
+                   .build();
+           return todoManager.save(task);
 
     }
 
-    public ResponseEntity<Tasks> taskUpdate (Tasks task, int id){
-        Optional <Tasks> optionalTask = todoManager.findById(id);
-        try {
-            if (!optionalTask.isPresent()) {
-                return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-            }
+    public Task taskUpdate (UpdateTaskRequest request, Integer id){
+        Task task = todoManager.findById(id).orElseThrow(() -> new TodoException(TASK_NOT_FOUND));
 
-            Tasks targetTask = optionalTask.get();
+        task.setTitle(request.getTitle());
+        task.setDescription(request.getDescription());
 
-            if (task.getTitle() != null) {
-                targetTask.setTitle(task.getTitle());
-            }
+        return todoManager.save(task);
+    }
 
-            if (task.getDescription() != null) {
-                targetTask.setDescription(task.getDescription());
-            }
+    public void taskDelete(int id){
+       if (todoManager.existsById(id)) {
+           todoManager.deleteById(id);
+       }
+    }
 
-            targetTask.setCreated_at(LocalDateTime.now());
+    public String toggleStatus(Integer id) {
+        Task task = todoManager.findById(id).orElseThrow(()-> new TodoException(TASK_NOT_FOUND));
 
-            todoManager.save(targetTask);
-            return new ResponseEntity<>(targetTask, HttpStatus.OK);
+        task.setCompleted(!task.getCompleted());
+
+        todoManager.save(task);
+
+        return "Task successfully updated";
+    }
+
+    private List<Task> getTasks(Integer offset, Integer limit, List<Task> tasks) {
+        int safeOffset = offset != null ? offset : 0;
+        int safeLimit = limit != null ? limit : tasks.size();
+
+        if (safeOffset < 0 || safeLimit < 0) {
+            throw new TodoException("Offset and limit must be non-negative.");
         }
-        catch (Exception e){
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+
+        List<Task> sortedTasks = tasks.stream().sorted(Comparator.comparing(Task::getCreatedAt).reversed()).toList();
+
+        if (safeOffset >= sortedTasks.size()) {
+            return List.of();
         }
-        }
 
-
-    public ResponseEntity<Tasks> taskDelete(int id){
-
-        try {
-            Optional <Tasks> optionalDelete = todoManager.findById(id);
-             if (!optionalDelete.isPresent()){
-                 return new ResponseEntity<>(HttpStatus.NOT_FOUND);
-             }
-             Tasks taskDelete = optionalDelete.get();
-
-             todoManager.delete(taskDelete);
-             return new ResponseEntity<>(taskDelete,HttpStatus.GONE);
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-
-        }
+        int endIndex = Math.min(safeOffset + safeLimit, sortedTasks.size());
+        return sortedTasks.subList(safeOffset, endIndex);
     }
 }

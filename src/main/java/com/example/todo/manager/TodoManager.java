@@ -1,11 +1,12 @@
 package com.example.todo.manager;
 
 import java.util.List;
-import com.example.todo.model.Tasks;
+import com.example.todo.model.Task;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.PagingAndSortingRepository;
 
-public interface TodoManager extends PagingAndSortingRepository<Tasks,Integer>, CrudRepository<Tasks,Integer> {
-    List<Tasks> findByCompletedFalse();
-    List<Tasks> findByCompletedTrue();
+public interface TodoManager extends PagingAndSortingRepository<Task,Integer>, CrudRepository<Task,Integer> {
+    List<Task> findByCompletedFalse();
+    List<Task> findByCompletedTrue();
+    List<Task> findAll();
 }
