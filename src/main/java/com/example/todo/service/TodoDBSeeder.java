@@ -5,6 +5,7 @@ import com.example.todo.model.Task;
 import com.github.javafaker.Faker;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.ZoneId;
@@ -16,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
+@Profile("!test")
 public class TodoDBSeeder implements CommandLineRunner {
 
     private final TodoManager todoManager;
