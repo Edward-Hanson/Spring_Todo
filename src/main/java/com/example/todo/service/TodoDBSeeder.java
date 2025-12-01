@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
-@Profile("!test")
+@Profile("prod")
 public class TodoDBSeeder implements CommandLineRunner {
 
     private final TodoManager todoManager;
